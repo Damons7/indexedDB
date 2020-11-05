@@ -1,0 +1,269 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="author" content="http://www.softwhy.com/" />
+    <title>indexdb</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        button {
+            display: block;
+            padding: 4px;
+            color: #428bca;
+            text-align: center;
+            font-weight: 900;
+            margin-bottom: 20px;
+        }
+    </style>
+    <script>
+        class indexDB {
+            constructor(databaseName, version) {
+                if (!window.indexedDB) {
+                    alert('浏览器不支持indexDB')
+                    return
+                }
+                this.request = window.indexedDB.open(databaseName, version)
+                this.db
+                this.upgradeneeded('students', { aoto: 'id' })
+                this.error()
+                this.success()
+            }
+
+            //错误请求
+            error() {
+                this.request.onerror = () => {
+                    console.log('数据库打开报错')
+                };
+            }
+
+            //成功请求
+            success() {
+                return new Promise((resolve, reject) => {
+                    this.request.onsuccess = () => {
+                        this.db = this.request.result
+                        resolve(this.db)
+                        console.log('数据库打开成功', this.db)
+                    }
+                })
+            }
+
+            upgradeneeded(tableName, data) {
+                this.request.onupgradeneeded = () => {
+                    this.db = this.request.result
+                    if (!this.db.objectStoreNames.contains(tableName)) {
+                        this.createObjectStore(tableName, data)
+                    }
+                }
+            }
+
+            //创建store
+            createObjectStore(tableName, data) {
+                let store = this.db.createObjectStore(tableName, data)
+                store.createIndex('nameIndex', 'name', { unique: true })
+                store.createIndex('ageIndex', 'age', { unique: false })
+                console.log('第一次创建数据库或者更新数据库', this.db)
+            }
+
+            //封装创建事务transaction
+            transaction(storeName, operate) {
+                let transaction = this.db.transaction([storeName], operate)
+                return transaction.objectStore(storeName)
+            }
+            //存储数据
+            saveData(storeName, data) {
+                let store = this.transaction([storeName], 'readwrite')
+                let addRequest = store.add(data)
+                addRequest.onsuccess = () => {
+                    console.log('存储成功', store)
+                }
+                addRequest.onerror = () => {
+                    console.log('存储失败', store)
+                }
+            }
+
+            //删除数据
+            deleteData(storeName, key) {
+                let store = this.transaction([storeName], 'readwrite')
+                let deleteRequest = store.delete(key)
+                deleteRequest.onsuccess = () => {
+                    console.log('删除数据成功', store)
+                }
+                deleteRequest.onerror = () => {
+                    console.log('删除数据失败', store)
+                }
+            }
+
+            //修改数据
+            updateDataByKey(storeName, newData) {
+                let store = this.transaction([storeName], 'readwrite')
+                let a = store.put(newData);
+                console.log("修改...");
+            }
+
+            //获取数据
+            getData(storeName, key) {
+                let store = this.transaction([storeName], 'readwrite')
+                let dataRequest = store.get(key)
+                dataRequest.onsuccess = (e) => {
+                    let data = e.target.result
+                    let message = data == undefined ? "查不到数据！" : "查找成功："
+                    console.log(message, data)
+                }
+            }
+
+            //获取数据索引
+            getDataByIndex(storeName, indexName) {
+                let store = this.transaction([storeName], 'readwrite')
+                let index = store.index(indexName)//获取索引
+                let request = index.get('张三')
+                request.onsuccess = (e) => {
+                    var data = e.target.result
+                    let message = data == undefined ? "查不到数据！" : "查找索引成功："
+                    console.log(message, data)
+                }
+            }
+
+            //游标
+            Cursor(storeName) {
+                let store = this.transaction([storeName], 'readwrite')
+                let cursorRequest = store.openCursor()
+                cursorRequest.onsuccess = (e) => {
+                    let cursor = e.target.result
+                    if (cursor) {
+                        console.log(cursor.value);
+                        cursor.continue()
+                    }
+                }
+            }
+
+            //指定游标范围
+            limitCursor(storeName, indexName) {
+                let store = this.transaction([storeName], 'readwrite')
+                let index = store.index(indexName)
+                let request = index.openCursor(IDBKeyRange.bound(20, 25, false, true))  //指定范围20-25
+                request.onsuccess = (e) => {
+                    let cursor = e.target.result
+                    if (cursor) {
+                        console.log(cursor.value)
+                        cursor.continue()
+                    }
+                }
+            }
+
+            //获取主键处于某一范围的值
+            getKeys(storeName) {
+                let store = this.transaction([storeName], 'readwrite')
+                let keyRange = IDBKeyRange.bound(2, 3, false, false)// 范围[2,3]
+                let request = store.getAllKeys(keyRange)
+                request.onsuccess = (e) => {
+                    console.log('获取keys：', e.target.result)
+                }
+            }
+
+            //获取index处于某一范围的值
+            getIndexs(storeName, indexName) {
+                let store = this.transaction([storeName], 'readwrite');
+                let index = store.index(indexName);
+                let request = index.openKeyCursor(IDBKeyRange.bound(3, 4, false, false));
+                request.onsuccess = (e) => {
+                    var cursor = e.target.result;
+                    console.log(cursor);
+                    if (cursor) {
+                        console.log('cursor.key', cursor.key, 'cursor.primaryKey', cursor.primaryKey)
+                        cursor.continue();
+                    } else {
+                        console.log('All last names displayed.');
+                    }
+                };
+            }
+            //清空数据
+            clearData(storeName) {
+                let store = this.transaction([storeName], 'readwrite');
+                store.clear();
+                console.log("清空数据...");
+            }
+        }
+
+        window.onload = function () {
+            //创建数据库
+            document.querySelector("#create").onclick = () => {
+                var req = new indexDB('damon', 1)
+                req.success();
+                window.req = req
+            }
+
+            //添加数据
+            document.querySelector("#add").onclick = function () {
+                req.saveData('students', { id: 1, name: '张三', age: 20 })
+                req.saveData('students', { id: 2, name: '李四', age: 24 })
+                req.saveData('students', { id: 3, name: '王五', age: 28 })
+            }
+
+            //删除数据
+            document.querySelector("#delete").onclick = function () {
+                req.deleteData('students', 1)
+            }
+
+            //修改数据
+            document.querySelector("#update").onclick = function () {
+                req.updateDataByKey('students', { id: 2, name: '修改后的人', age: 99 });
+            }
+
+            //查找数据
+            document.querySelector("#search").onclick = function () {
+                req.getData('students', 1);
+            }
+
+            //获取数据索引
+            document.querySelector("#getIndex").onclick = function () {
+                req.getDataByIndex('students', 'nameIndex');
+            };
+
+            //清空数据
+            document.querySelector("#clear").onclick = () => {
+                req.clearData('students')
+            }
+
+            //游标
+            document.querySelector("#getCursor").onclick = () => {
+                req.Cursor('students')
+            }
+
+            //指定游标范围游标
+            document.querySelector("#limitCursor").onclick = () => {
+                req.limitCursor('students', 'ageIndex');
+            }
+
+            //获取主键处于某一范围的值
+            document.querySelector("#getKeys").onclick = () => {
+                req.getKeys('students');
+            }
+
+            //获取index处于某一范围的值
+            document.querySelector("#getIndexs").onclick = () => {
+                req.getIndexs('students', 'ageIndex');
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <button id="create">初始化</button>
+    <button id="add">新增数据</button>
+    <button id="delete">删除数据</button>
+    <button id="update">修改数据</button>
+    <button id="search">查找数据</button>
+    <button id="getIndex">获取数据索引</button>
+    <button id="clear">清空数据</button>
+    <button id="getCursor">游标</button>
+    <button id="limitCursor">指定游标游标</button>
+    <button id="getKeys">获取范围的游标</button>
+    <button id="getIndexs">获取范围的索引</button>
+</body>
+
+</html>
